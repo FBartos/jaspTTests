@@ -55,6 +55,10 @@
   dataset <- .ttestBayesianReadData(dataset, options)
   errors  <- .ttestBayesianGetErrorsPerVariable(dataset, options, analysis)
 
+
+  saveRDS(options, file = "C:/JASP/options.RDS")
+  saveRDS(dataset, file = "C:/JASP/dataset.RDS")
+
   # Main analysis
   ttestResults <- .ttestBayesian(jaspResults, dataset, options, errors, analysis)
 
@@ -98,6 +102,7 @@
       "informativeCauchyLocation", "informativeCauchyScale", "informativeNormalMean",
       "informativeNormalStd", "informativeStandardizedEffectSize",
       "informativeTDf", "informativeTLocation", "informativeTScale",
+      "nonlocalStandardizedEffectSize", "nonlocalMomentBFFR", "nonlocalMomentR", "nonlocalMomentDelta",
       "naAction", "priorWidth", "test", "wilcoxonSamples",
       "testValue", depends_seed, depends_variables
     ))
@@ -871,11 +876,35 @@
   # we cannot do robustness and sequential plots for informed priors, hence do only prior & posterior plot:
   if(options[["effectSizeStandardized"]] == "default")
     opts <- c("priorAndPosteriorPlot", "bfRobustnessPlot", "bfSequentialPlot")
+  else if(options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
+    opts <- c("priorAndPosteriorPlot", "bfFunctionPlot")
   else
     opts <- c("priorAndPosteriorPlot")
 
   if (!any(unlist(options[opts])))
     return()
+
+  dependencies <- list(
+    "priorAndPosteriorPlot" = c("priorAndPosteriorPlot", "priorAndPosteriorPlotAdditionalInfo", "priorAndPosteriorPlotCiLevel"),
+    "bfRobustnessPlot"      = c("bfRobustnessPlot", "bfRobustnessPlotAdditionalInfo", "bayesFactorType"),
+    "bfSequentialPlot"      = c("bfSequentialPlot", "bfSequentialPlotRobustness", "bayesFactorType"),
+    "bfFunctionPlot"        = c("bfFunctionPlot", "bfFunctionPlotAdditionalInfo", "bayesFactorType")
+  )[opts]
+
+  plotTitles <- c(
+    "priorAndPosteriorPlot" = gettext("Prior and Posterior"),
+    "bfRobustnessPlot"      = gettext("Bayes Factor Robustness Check"),
+    "bfSequentialPlot"      = gettext("Sequential Analysis"),
+    "bfFunctionPlot"        = gettext("Bayes Factor Function")
+  )[opts]
+
+  jaspTitles <- c(
+    "priorAndPosteriorPlot" = "priorAndPosteriorPlot",
+    "bfRobustnessPlot"      = "robustnessPlot",
+    "bfSequentialPlot"      = "sequentialPlot",
+    "bfFunctionPlot"        = "bayesFactorFunctionPlot"
+  )[opts]
+
 
   if (ttestResults[["paired"]]) {
     dependents <- ttestResults[["derivedOptions"]][["dependents"]]
@@ -908,18 +937,8 @@
 
 
   # create all empty plots and containers before filling them in one-by-one, to avoid the screen from flashing
-  dependencies <- list(
-    c("priorAndPosteriorPlot",     "priorAndPosteriorPlotAdditionalInfo", "priorAndPosteriorPlotCiLevel"),
-    c("bfRobustnessPlot", "bfRobustnessPlotAdditionalInfo", "bayesFactorType"),
-    c("bfSequentialPlot",    "bfSequentialPlotRobustness",        "bayesFactorType")
-  )
 
-  plotTitles <- c(
-    gettext("Prior and Posterior"),
-    gettext("Bayes Factor Robustness Check"),
-    gettext("Sequential Analysis")
-  )
-  jaspTitles <- c("priorAndPosteriorPlot", "robustnessPlot", "sequentialPlot")
+
   for (var in dependents) { # was there a container for these plots for this variable?
     if (is.null(inferentialPlotsCollection[[var]])) {
       container <- createJaspContainer(title = var)
@@ -1012,6 +1031,25 @@
       rscale                 = options[["priorWidth"]],
       effectSizeStandardized = options[["effectSizeStandardized"]],
       plotDifferentPriors    = options[["bfSequentialPlotRobustness"]],
+      options                = options
+    )
+  }
+
+  if (options[["bfFunctionPlot"]] && options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF") {
+    .ttestBayesianPlotBayesFactorFunction(
+      collection             = inferentialPlotsCollection,
+      dependents             = dependents,
+      errors                 = errors,
+      dataset                = dataset,
+      grouping               = grouping,
+      pairs                  = pairs,
+      BF10post               = ttestResults[["BF10post"]],
+      BFH1H0                 = ttestResults[["BFH1H0"]],
+      paired                 = ttestResults[["paired"]],
+      plottingError          = ttestResults[["plottingError"]],
+      oneSided               = ttestResults[["derivedOptions"]][["oneSided"]],
+      nullInterval           = ttestResults[["derivedOptions"]][["nullInterval"]],
+      r                      = options[["nonlocalMomentBFFR"]],
       options                = options
     )
   }
@@ -1220,6 +1258,82 @@
           currentPlot         = currentPlot,
           totalPlots          = length(dependents),
           ...
+        ))
+        if (isTryError(obj)) {
+          plot$setError(.extractErrorMessage(obj))
+        } else {
+          plot$plotObject <- obj
+        }
+      } else {
+        if (!isFALSE(errors[[var]])) {
+          err <- errors[[var]][["message"]]
+        } else {
+          err <- plottingError[[var]]
+        }
+        plot$setError(err)
+      }
+    }
+    currentPlot <- currentPlot + 1L
+  }
+}
+
+.ttestBayesianPlotBayesFactorFunction <- function(collection, dependents, errors, dataset,
+                                         grouping = NULL, BF10post, BFH1H0,
+                                         r = NULL, paired = FALSE,
+                                         plottingError = NULL,
+                                         oneSided = FALSE, nullInterval = c(-Inf, Inf),
+                                         additionalInformation = TRUE,
+                                         pairs = NULL,
+                                         options, ...) {
+  hasGrouping <- !is.null(grouping)
+  if (hasGrouping) {
+    levels <- levels(dataset[[.v(grouping)]])
+    g1 <- levels[1]
+    g2 <- levels[2]
+    idxG1 <- dataset[[.v(grouping)]] == g1
+    idxG2 <- dataset[[.v(grouping)]] == g2
+  } else {
+    g1 <- NULL
+    g2 <- NULL
+    group2 <- NULL
+  }
+
+  currentPlot <- 1L
+  for (var in dependents) {
+    if (is.null(collection[[var]][["bayesFactorFunctionPlot"]]$plotObject)) {
+      plot <- collection[[var]][["bayesFactorFunctionPlot"]]
+      if (isFALSE(errors[[var]]) && is.null(plottingError[[var]])) {
+
+        plot$status <- "running"
+        if (paired) {
+          pair <- pairs[[var]]
+          group1 <- dataset[, .v(pair[[1]])]
+          group2 <- dataset[, .v(pair[[2]])]
+          idxC <- !(is.na(group1) | is.na(group2))
+          group1 <- group1[idxC]
+          group2 <- group2[idxC]
+        } else {
+          idxC <- !is.na(dataset[[.v(var)]])
+          if (hasGrouping) {
+            group1 <- dataset[idxG1 & idxC, .v(var)]
+            group2 <- dataset[idxG2 & idxC, .v(var)]
+          } else {
+            group1 <- dataset[idxC, .v(var)]
+            group1 <- group1 - options[["testValue"]]
+          }
+        }
+
+        obj <- try(.plotBF.bayesFactorFunction(
+          x                     = group1,
+          y                     = group2,
+          r                     = r,
+          paired                = paired,
+          oneSided              = oneSided,
+          nullInterval          = nullInterval,
+          BFH1H0                = BFH1H0,
+          additionalInformation = additionalInformation,
+          currentPlot           = currentPlot,
+          totalPlots            = length(dependents)
         ))
         if (isTryError(obj)) {
           plot$setError(.extractErrorMessage(obj))
@@ -2297,6 +2411,115 @@
 
 }
 
+.plotBF.bayesFactorFunction <- function(
+    x, y, paired, r,
+    oneSided = FALSE, nullInterval = c(-Inf, Inf),
+    BFH1H0 = TRUE, additionalInformation = FALSE, currentPlot = 1L, totalPlots = 1L) {
+
+  tValue <- unname(t.test(x, y, paired = paired, var.equal = TRUE)$statistic)
+  # numeric multiplication is more robust in R
+  n1 <- as.numeric(length(x))
+  n2 <- if (paired) 0 else as.numeric(length(y))
+
+  # get the BFF
+  bfObject <- t_test_BFF(
+    t_stat      = tValue,
+    n           = if(n2 != 0) NULL else n1,
+    one_sample  = n2 != 0,
+    alternative = if(!oneSided) "two.sided" else switch(oneSided, "right" = "greater", "left" = "less"),
+    n1          = if(n2 == 0) NULL else n1,
+    n2          = if(n2 == 0) NULL else n2,
+    r           = r,
+    omega       = NULL)
+  max_log_bf <- bfObject$log_bf
+  max_omega  <- bfObject$omega
+
+  # get BFs at small/medium/large effects
+  omegas  <- c(0.2, 0.5, 0.8)
+  log_bfs <- NULL
+  for(omega in omegas){
+    log_bfs <- c(log_bfs, t_test_BFF(
+      t_stat      = tValue,
+      n           = if(n2 != 0) NULL else n1,
+      one_sample  = n2 != 0,
+      alternative = if(!oneSided) "two.sided" else switch(oneSided, "right" = "greater", "left" = "less"),
+      n1          = if(n2 == 0) NULL else n1,
+      n2          = if(n2 == 0) NULL else n2,
+      r           = r,
+      omega       = omega)$log_bf)
+  }
+
+
+  dfLines <- data.frame(
+    x = bfObject$BFF$omega,
+    y = bfObject$BFF$log_bf
+  )
+
+  if (BFH1H0) {
+    bfType <- "BF10"
+  } else {
+    bfType <- "BF01"
+    dfLines$y  <- - dfLines$y
+    log_bfs    <- - log_bfs
+    max_log_bf <- - max_log_bf
+  }
+
+  BFsubscript <- .ttestBayesianGetBFnamePlots(BFH1H0, nullInterval, subscriptsOnly = TRUE)
+
+  label1 <- c(
+    gettextf("max BF%s", BFsubscript),
+    gettext("small effect"),
+    gettext("medium effect"),
+    gettext("large effect")
+  )
+  # some failsafes to parse translations as expressions
+  label1[1] <- gsub(pattern = "\\s+", "~", label1[1])
+  label1[-1] <- paste0("\"", label1[-1], "\"")
+  label1 <- paste0("paste(", label1, ", ':')")
+
+  BFandSubscript <- gettextf("BF%s", BFsubscript)
+  BFandSubscript <- gsub(pattern = "\\s+", "~", BFandSubscript)
+  label2 <- c(
+    gettextf("%1$s at delta==%2$s",  format(exp(max_omega),  digits = 4), format(max_omega, digits = 4)),
+    paste0(BFandSubscript, "==", format(exp(log_bfs[1]), digits = 4)),
+    paste0(BFandSubscript, "==", format(exp(log_bfs[2]), digits = 4)),
+    paste0(BFandSubscript, "==", format(exp(log_bfs[3]), digits = 4))
+  )
+  label2[1L] <- gsub(pattern = "\\s+", "~", label2[1])
+
+  if (additionalInformation) {
+    dfPoints <- data.frame(
+      x = c(max_omega,  omega),
+      y = c(max_log_bf, max_log_bf),
+      g = label1,
+      label1 = jaspGraphs::parseThis(label1),
+      label2 = jaspGraphs::parseThis(label2),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    dfPoints <- NULL
+  }
+
+  hypothesis <- switch(oneSided,
+                       "right" = "greater",
+                       "left"  = "smaller",
+                       "equal")
+
+  if(any(is.infinite(dfLines[["y"]])))
+    stop(gettext("Some Bayes factors were infinite"))
+
+  plot <- jaspGraphs::PlotRobustnessSequential(
+    dfLines      = dfLines,
+    dfPoints     = dfPoints,
+    pointLegend  = additionalInformation,
+    xName        = gettext("Nonlocal prior \U03B4"),
+    hypothesis   = hypothesis,
+    bfType       = bfType
+  )
+
+  return(plot)
+}
+
 .ttestBayesianRainCloudPlots <- function(jaspResults, dataset, options, analysis) {
   if (is.null(options[["raincloudPlot"]]) || !options[["raincloudPlot"]])
     return()
@@ -2436,5 +2659,6 @@
   "MoreyEtal2015"    = "Morey, R. D., & Rouder, J. N. (2015). BayesFactor (Version 0.9.11-3)[Computer software].",
   "RouderEtal2009"   = "Rouder, J. N., Speckman, P. L., Sun, D., Morey, R. D., & Iverson, G. (2009). Bayesian t tests for accepting and rejecting the null hypothesis. Psychonomic Bulletin & Review, 16, 225-237.",
   "doorn2020bayesian" = "van Doorn, J., Ly, A., Marsman, M., & Wagenmakers, E.-J. (2020). Bayesian rank-based hypothesis testing for the rank sum test, the signed rank test, and Spearman’s ρ. Journal of Applied Statistics, 47(16), 2984-3006.",
-  "gronau2020informed"   = "Gronau, Q. F., Ly, A., & Wagenmakers, E.-J. (2020). Informed Bayesian t-tests. The American Statistician, 74, 137-143."
+  "gronau2020informed"   = "Gronau, Q. F., Ly, A., & Wagenmakers, E.-J. (2020). Informed Bayesian t-tests. The American Statistician, 74, 137-143.",
+  "johnson2023bayes" = "Johnson, V. E., Pramanik, S., & Shudde, R. (2023). Bayes factor functions for reporting outcomes of hypothesis tests. Proceedings of the National Academy of Sciences, 120(8), e2217331120."
 )

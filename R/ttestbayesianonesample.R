@@ -483,6 +483,38 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
       error <- NULL
     }
 
+  } else if (options[["effectSizeStandardized"]] == "nonlocal") {
+
+    ### non-local prior distributions ###
+    if (options[["nonlocalStandardizedEffectSize"]] == "momentBFF") {
+      bfObject <- t_test_BFF(
+        t_stat      = tValue,
+        n           = if(n2 != 0) NULL else n1,
+        one_sample  = n2 != 0,
+        alternative = if(!oneSided) "two.sided" else switch(oneSided, "right" = "greater", "left" = "less"),
+        n1          = if(n2 == 0) NULL else n1,
+        n2          = if(n2 == 0) NULL else n2,
+        r           = options[["nonlocalMomentBFFR"]],
+        omega       = NULL)
+
+      bf                <- exp(bfObject$log_bf)
+      attr(bf, "omega") <- bfObject$omega
+      error             <- NULL
+    } else if (options[["nonlocalStandardizedEffectSize"]] == "moment") {
+      bfObject <- t_test_BFF(
+        t_stat      = tValue,
+        n           = if(n2 != 0) NULL else n1,
+        one_sample  = n2 != 0,
+        alternative = if(!oneSided) "two.sided" else switch(oneSided, "right" = "greater", "left" = "less"),
+        n1          = if(n2 == 0) NULL else n1,
+        n2          = if(n2 == 0) NULL else n2,
+        r           = options[["nonlocalMomentR"]],
+        omega       = options[["nonlocalMomentDelta"]])
+
+      bf                <- exp(bfObject$log_bf)
+      error             <- NULL
+    }
+
   }
 
   return(list(bf = bf, error = error, tValue = tValue, n1 = n1, n2 = n2, method = method))

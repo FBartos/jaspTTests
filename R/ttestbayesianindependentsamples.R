@@ -119,6 +119,12 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
             ttestTable$addFootnote(message = message)
             ttestResults[["globalFootnotes"]] <- c(ttestResults[["globalFootnotes"]], message)
           }
+          if (is.null(error) && options[["effectSizeStandardized"]] == "nonlocal") {
+            error <- NA_real_
+            message <- gettext("No error estimate is available for non-local priors.")
+            ttestTable$addFootnote(message = message)
+            ttestResults[["globalFootnotes"]] <- c(ttestResults[["globalFootnotes"]], message)
+          }
         }
 
       } else { # wilcoxtest
@@ -180,6 +186,9 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
       }
       ttestRows[var, "BF"]    <- BF
       ttestRows[var, "error"] <- error
+
+      if (options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
+        ttestRows[var, "atDelta"] <- attr(bf.raw, "omega")
     }
     # set data construction is necessary for the slower rank based analysis
     ttestTable$setData(ttestRows)
@@ -208,6 +217,8 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
     citations <- .ttestBayesianCitations["doorn2020bayesian"]
   } else if (options[["effectSizeStandardized"]] == "informative") {
     citations <- .ttestBayesianCitations["gronau2020informed"]
+  } else if (options[["effectSizeStandardized"]] == "nonlocal") {
+    citations <- .ttestBayesianCitations["johnson2023bayes"]
   }
 
   jaspTable$addCitation(citations)
@@ -223,6 +234,9 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
   )
   bfTitle <- .ttestBayesianGetBFTitle(bfType, hypothesis)
   jaspTable$addColumnInfo(name = "BF", type = "number", title = bfTitle)
+
+  if (options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
+    jaspTable$addColumnInfo(name = "atDelta", type = "number", title = gettext("at \U03B4"))
 
   if (derivedOptions[["wilcoxTest"]]) {
     jaspTable$addColumnInfo(name = "error", type = "number", title = "W")

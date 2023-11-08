@@ -69,6 +69,13 @@ Form {
 
 		CheckBox
 		{
+			enabled: priors.nonlocalPriorsChecked && priors.nonlocalMomentBFFChecked 
+			name: "bfFunctionPlot";	label: qsTr("Bayes factor function"); checked: true 
+			CheckBox { name: "bfFunctionPlotAdditionalInfo";		label: qsTr("Additional info"); checked: true }
+		}
+
+		CheckBox
+		{
 			enabled: student.checked && priors.defaultPriorsChecked
 			name: "bfSequentialPlot";		label: qsTr("Sequential analysis")
 			CheckBox { name: "bfSequentialPlotRobustness";		label: qsTr("Robustness check") }
@@ -126,5 +133,5 @@ Form {
 
 	SetSeed{enabled: testWilcoxon.checked}
 
-	SubjectivePriors { id: priors; informedPriorsEnabled: student.checked }
+	Common.SubjectivePriorsNew { id: priors; informedPriorsEnabled: student.checked }
 }
