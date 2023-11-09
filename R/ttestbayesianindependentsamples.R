@@ -232,11 +232,11 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
     "greater" = "greater",
     "less" = "smaller"
   )
-  bfTitle <- .ttestBayesianGetBFTitle(bfType, hypothesis)
+  bfTitle <- .ttestBayesianGetBFTitle(bfType, hypothesis, options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
   jaspTable$addColumnInfo(name = "BF", type = "number", title = bfTitle)
 
   if (options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
-    jaspTable$addColumnInfo(name = "atDelta", type = "number", title = gettext("at \U03B4"))
+    jaspTable$addColumnInfo(name = "atDelta", type = "number", title = gettext("At \U03B4"))
 
   if (derivedOptions[["wilcoxTest"]]) {
     jaspTable$addColumnInfo(name = "error", type = "number", title = "W")

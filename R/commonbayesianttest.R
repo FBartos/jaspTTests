@@ -359,7 +359,8 @@
 }
 
 .ttestBayesianGetBFTitle <- function(bfType = c("BF10", "BF01", "LogBF10"),
-                                     hypothesis = c("equal", "greater", "smaller")) {
+                                     hypothesis = c("equal", "greater", "smaller"),
+                                     maximum = FALSE) {
 
   bfType <- match.arg(bfType)
   hypothesis <- match.arg(hypothesis)
@@ -372,14 +373,19 @@
     } else {
       bfTitle <- "BF\u208B\u2080"
     }
+    if (maximum)
+      bfTitle <- paste0("max(", bfTitle, ")")
   } else if (bfType == "LogBF10") {
     if (hypothesis == "equal") {
-      bfTitle <- "Log(\u0042\u0046\u2081\u2080)"
+      bfTitle <- "\u0042\u0046\u2081\u2080"
     } else if (hypothesis == "greater") {
-      bfTitle <- "Log(\u0042\u0046\u208A\u2080)"
+      bfTitle <- "\u0042\u0046\u208A\u2080"
     } else {
-      bfTitle <- "Log(\u0042\u0046\u208B\u2080)"
+      bfTitle <- "\u0042\u0046\u208B\u2080"
     }
+    if (maximum)
+      bfTitle <- paste0("max[", bfTitle, "]")
+    bfTitle <- paste0("Log(", bfTitle, ")")
   } else if (bfType == "BF01") {
     if (hypothesis == "equal") {
       bfTitle <- "BF\u2080\u2081"
@@ -388,6 +394,8 @@
     } else {
       bfTitle <- "BF\u2080\u208B"
     }
+    if (maximum)
+      bfTitle <- paste0("min(", bfTitle, ")")
   }
   return(bfTitle)
 }
@@ -1085,7 +1093,7 @@
           delta                  = delta[[var]],
           addInformation         = addInformation,
           wilcoxTest             = wilcoxTest,
-          ciValue               = ciValue,
+          ciValue                = ciValue,
           options                = options,
           ...
         ))
@@ -2114,49 +2122,99 @@
       CIhigh <- ciPlusMedian[["ciUpper"]]
       medianPosterior <- ciPlusMedian[["median"]]
 
-    }else if (options[["informativeStandardizedEffectSize"]] == "cauchy") {
-      ci99PlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
+    }else if (options[["effectSizeStandardized"]] == "informative"){
+      if (options[["informativeStandardizedEffectSize"]] == "cauchy") {
+        ci99PlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
+                                          prior.location = options[["informativeCauchyLocation"]],
+                                          prior.scale = options[["informativeCauchyScale"]],
+                                          prior.df = 1, ci = .99, oneSided = oneSided)
+        priorLower <- .qShiftedT(.15, parameters = c(options[["informativeCauchyLocation"]],
+                                                      options[["informativeCauchyScale"]],
+                                                      1), oneSided = oneSided)
+        priorUpper <- .qShiftedT(.85, parameters = c(options[["informativeCauchyLocation"]],
+                                                      options[["informativeCauchyScale"]],
+                                                      1), oneSided = oneSided)
+        # compute 95% credible interval & median:
+        ciPlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
                                         prior.location = options[["informativeCauchyLocation"]],
                                         prior.scale = options[["informativeCauchyScale"]],
-                                        prior.df = 1, ci = .99, oneSided = oneSided)
-      priorLower <- .qShiftedT(.15, parameters = c(options[["informativeCauchyLocation"]],
-                                                    options[["informativeCauchyScale"]],
-                                                    1), oneSided = oneSided)
-      priorUpper <- .qShiftedT(.85, parameters = c(options[["informativeCauchyLocation"]],
-                                                    options[["informativeCauchyScale"]],
-                                                    1), oneSided = oneSided)
-      # compute 95% credible interval & median:
-      ciPlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
-                                      prior.location = options[["informativeCauchyLocation"]],
-                                      prior.scale = options[["informativeCauchyScale"]],
-                                      prior.df = 1, ci = ciValue, oneSided = oneSided)
-      CIlow <- ciPlusMedian[["ciLower"]]
-      CIhigh <- ciPlusMedian[["ciUpper"]]
-      medianPosterior <- ciPlusMedian[["median"]]
+                                        prior.df = 1, ci = ciValue, oneSided = oneSided)
+        CIlow <- ciPlusMedian[["ciLower"]]
+        CIhigh <- ciPlusMedian[["ciUpper"]]
+        medianPosterior <- ciPlusMedian[["median"]]
 
-    } else if (options[["informativeStandardizedEffectSize"]] == "t") {
-      ci99PlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
+      } else if (options[["informativeStandardizedEffectSize"]] == "t") {
+        ci99PlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
+                                          prior.location = options[["informativeTLocation"]],
+                                          prior.scale = options[["informativeTScale"]],
+                                          prior.df = options[["informativeTDf"]],
+                                          ci = .99, oneSided = oneSided)
+        priorLower <- .qShiftedT(.15, parameters = c(options[["informativeTLocation"]],
+                                                      options[["informativeTScale"]],
+                                                      options[["informativeTDf"]]),
+                                 oneSided = oneSided)
+        priorUpper <- .qShiftedT(.85, parameters = c(options[["informativeTLocation"]],
+                                                      options[["informativeTScale"]],
+                                                      options[["informativeTDf"]]),
+                                 oneSided = oneSided)
+        # compute 95% credible interval & median:
+        ciPlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
                                         prior.location = options[["informativeTLocation"]],
                                         prior.scale = options[["informativeTScale"]],
-                                        prior.df = options[["informativeTDf"]],
-                                        ci = .99, oneSided = oneSided)
-      priorLower <- .qShiftedT(.15, parameters = c(options[["informativeTLocation"]],
-                                                    options[["informativeTScale"]],
-                                                    options[["informativeTDf"]]),
-                               oneSided = oneSided)
-      priorUpper <- .qShiftedT(.85, parameters = c(options[["informativeTLocation"]],
-                                                    options[["informativeTScale"]],
-                                                    options[["informativeTDf"]]),
-                               oneSided = oneSided)
-      # compute 95% credible interval & median:
-      ciPlusMedian <- .ciPlusMedian_t(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
-                                      prior.location = options[["informativeTLocation"]],
-                                      prior.scale = options[["informativeTScale"]],
-                                      prior.df = options[["informativeTDf"]], ci = ciValue, oneSided = oneSided)
-      CIlow <- ciPlusMedian[["ciLower"]]
-      CIhigh <- ciPlusMedian[["ciUpper"]]
-      medianPosterior <- ciPlusMedian[["median"]]
-    } else if (options[["informativeStandardizedEffectSize"]] == "normal") {
+                                        prior.df = options[["informativeTDf"]], ci = ciValue, oneSided = oneSided)
+        CIlow <- ciPlusMedian[["ciLower"]]
+        CIhigh <- ciPlusMedian[["ciUpper"]]
+        medianPosterior <- ciPlusMedian[["median"]]
+      } else if (options[["informativeStandardizedEffectSize"]] == "normal") {
+        ci99PlusMedian <- .ciPlusMedian_normal(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
+                                               prior.mean = options[["informativeNormalMean"]],
+                                               prior.variance = options[["informativeNormalStd"]]^2,
+                                               ci = .99, oneSided = oneSided)
+
+        priorAreaSmaller0 <- pnorm(0, options[["informativeNormalMean"]], options[["informativeNormalStd"]])
+        if (oneSided == "right") {
+          lowerp <- priorAreaSmaller0 + (1 - priorAreaSmaller0)*0.15
+          upperp <- priorAreaSmaller0 + (1 - priorAreaSmaller0)*0.85
+        } else if (oneSided == "left") {
+          lowerp <- priorAreaSmaller0*0.15
+          upperp <- priorAreaSmaller0*0.85
+        } else {
+          lowerp <- 0.15
+          upperp <- 0.85
+        }
+
+        priorLower <- qnorm(lowerp, options[["informativeNormalMean"]], options[["informativeNormalStd"]])
+        priorUpper <- qnorm(upperp, options[["informativeNormalMean"]], options[["informativeNormalStd"]])
+
+        # compute 95% credible interval & median:
+        ciPlusMedian <- .ciPlusMedian_normal(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
+                                             prior.mean = options[["informativeNormalMean"]],
+                                             prior.variance = options[["informativeNormalStd"]]^2,
+                                             ci = ciValue, oneSided = oneSided)
+        CIlow <- ciPlusMedian[["ciLower"]]
+        CIhigh <- ciPlusMedian[["ciUpper"]]
+        medianPosterior <- ciPlusMedian[["median"]]
+      }
+    } else if (options[["effectSizeStandardized"]] == "nonlocal") {
+
+      # use prior & posterior with omega corresponding to the highest BF in case a BFF is selected
+      if (options[["nonlocalStandardizedEffectSize"]] == "momentBFF") {
+        bfObject <- t_test_BFF(
+          t_stat      = t,
+          n           = if(n2 != 0) NULL else n1,
+          one_sample  = n2 != 0,
+          alternative = if(!oneSided) "two.sided" else switch(oneSided, "right" = "greater", "left" = "less"),
+          n1          = if(n2 == 0) NULL else n1,
+          n2          = if(n2 == 0) NULL else n2,
+          r           = options[["nonlocalMomentBFFR"]],
+          omega       = NULL)
+        omega <- bfObject$omega
+      }
+
+
+      # TODO
+      # get prior and posterior
+
       ci99PlusMedian <- .ciPlusMedian_normal(t = t, n1 = n1, n2 = n2, independentSamples = ! paired && !is.null(n2),
                                              prior.mean = options[["informativeNormalMean"]],
                                              prior.variance = options[["informativeNormalStd"]]^2,
