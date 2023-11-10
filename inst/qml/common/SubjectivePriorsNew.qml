@@ -109,7 +109,7 @@ Section
 					{
 						label: qsTr("Moment"); name: "moment"; childrenOnSameRow: true; id: nonlocalMoment
 						DoubleField { label: qsTr("r:"); name: "nonlocalMomentR"; visible: nonlocalMoment.checked; defaultValue: 1; min: 1; max: 20; inclusive: JASP.MinOnly }
-						DoubleField { label: qsTr("delta:"); name: "nonlocalMomentDelta"; visible: nonlocalMoment.checked; defaultValue: 1; fieldWidth: 50; max: 2; inclusive: JASP.MaxOnly }
+						DoubleField { label: qsTr("mode(δ):"); name: "nonlocalMomentModeDelta"; visible: nonlocalMoment.checked; defaultValue: 1; fieldWidth: 50; max: 2; inclusive: JASP.MaxOnly }
 					}
 				}
 			}

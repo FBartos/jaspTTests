@@ -509,7 +509,7 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
         n1          = if(n2 == 0) NULL else n1,
         n2          = if(n2 == 0) NULL else n2,
         r           = options[["nonlocalMomentR"]],
-        omega       = options[["nonlocalMomentDelta"]])
+        omega       = options[["nonlocalMomentModeDelta"]])
 
       bf                <- exp(bfObject$log_bf)
       error             <- NULL

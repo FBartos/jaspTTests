@@ -16,6 +16,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+# TODO:
+# - deal with the disapearing atDelta when `bayesFactorType` is changed
+# (I assume there is a table recoding function that skips the recomputation step...)
+
+
 .ttestBayesianRunAnalysis <- function(jaspResults, dataset, options,
                                       analysis = c("independent", "paired", "one-sample")) {
 
@@ -102,7 +107,7 @@
       "informativeCauchyLocation", "informativeCauchyScale", "informativeNormalMean",
       "informativeNormalStd", "informativeStandardizedEffectSize",
       "informativeTDf", "informativeTLocation", "informativeTScale",
-      "nonlocalStandardizedEffectSize", "nonlocalMomentBFFR", "nonlocalMomentR", "nonlocalMomentDelta",
+      "nonlocalStandardizedEffectSize", "nonlocalMomentBFFR", "nonlocalMomentR", "nonlocalMomentModeDelta",
       "naAction", "priorWidth", "test", "wilcoxonSamples",
       "testValue", depends_seed, depends_variables
     ))
