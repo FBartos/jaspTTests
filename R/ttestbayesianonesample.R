@@ -82,8 +82,9 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
           ttestTable$addFootnote(message = errorMessage, rowNames = var, colNames = "BF")
         } else {
 
-          bf.raw <- r[["bf"]]
-          error  <- r[["error"]]
+          bf.raw  <- r[["bf"]]
+          error   <- r[["error"]]
+          atDelta <- r[["atDelta"]]
           ttestResults[["tValue"]][[var]] <- r[["tValue"]]
           ttestResults[["n1"]][var]       <- r[["n1"]]
           # ttestResults[["n2"]][var]       <- r[["n2"]]
@@ -99,6 +100,12 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
               options[["informativeStandardizedEffectSize"]] == "normal") {
             error <- NA_real_
             message <- gettext("No error estimate is available for normal priors.")
+            ttestTable$addFootnote(message = message)
+            ttestResults[["globalFootnotes"]] <- c(ttestResults[["globalFootnotes"]], message)
+          }
+          if (is.null(error) && options[["effectSizeStandardized"]] == "nonlocal") {
+            error <- NA_real_
+            message <- gettext("No error estimate is available for non-local priors.")
             ttestTable$addFootnote(message = message)
             ttestResults[["globalFootnotes"]] <- c(ttestResults[["globalFootnotes"]], message)
           }
@@ -158,8 +165,8 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
 
       ttestResults[["BF10post"]][var] <- bf.raw
       BF <- jaspBase:::.recodeBFtype(bfOld     = bf.raw,
-                          newBFtype = bf.type,
-                          oldBFtype = "BF10")
+                                     newBFtype = bf.type,
+                                     oldBFtype = "BF10")
 
       msg <- .ttestBayesianCheckBFPlot(BF)
       if (!is.null(msg)) {
@@ -168,6 +175,9 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
       }
       ttestRows[var, "BF"]    <- BF
       ttestRows[var, "error"] <- error
+
+      if (options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
+        ttestRows[var, "atDelta"] <- atDelta
     }
     # set data construction to facilitate implementation of the slower rank based analysis
     ttestTable$setData(ttestRows)
@@ -197,16 +207,18 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
     citations <- .ttestBayesianCitations["doorn2020bayesian"]
   } else if (options[["effectSizeStandardized"]] == "informative") {
     citations <- .ttestBayesianCitations["gronau2020informed"]
+  } else if (options[["effectSizeStandardized"]] == "nonlocal") {
+    citations <- .ttestBayesianCitations["johnson2023bayes"]
   }
   jaspTable$addCitation(citations)
 
   bfType <- options[["bayesFactorType"]]
-	hypothesis <- switch(options[["alternative"]],
-	  "twoSided"  = "equal",
-	  "greater" = "greater",
-	  "less"    = "smaller"
-	)
-	bfTitle <- .ttestBayesianGetBFTitle(bfType, hypothesis)
+  hypothesis <- switch(options[["alternative"]],
+                       "twoSided"  = "equal",
+                       "greater" = "greater",
+                       "less"    = "smaller"
+  )
+  bfTitle <- .ttestBayesianGetBFTitle(bfType, hypothesis, options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
 
   testValueFormatted <- format(options[["testValue"]], drop0trailing = TRUE)
   message <- switch(
@@ -228,6 +240,9 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
 
   jaspTable$addColumnInfo(name = "variable", title = "",      type = "string")
   jaspTable$addColumnInfo(name = "BF",       title = bfTitle, type = "number")
+
+  if (options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
+    jaspTable$addColumnInfo(name = "atDelta", type = "number", title = gettext("At mode(\U03B4)"))
 
   if (derivedOptions[["wilcoxTest"]]) {
     jaspTable$addColumnInfo(name = "error", type = "number", title = "W")
@@ -424,7 +439,8 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
   # numeric multiplication is more robust in R
   n1 <- as.numeric(length(x))
   n2 <- if (paired) 0 else as.numeric(length(y))
-  method <- NULL
+  method  <- NULL
+  atDelta <- NULL
 
   if(options[["effectSizeStandardized"]] == "default") {
 
@@ -487,35 +503,35 @@ TTestBayesianOneSampleInternal <- function(jaspResults, dataset, options, state 
 
     ### non-local prior distributions ###
     if (options[["nonlocalStandardizedEffectSize"]] == "momentBFF") {
-      bfObject <- t_test_BFF(
+      bfObject <- BFF::t_test_BFF(
         t_stat      = tValue,
-        n           = if(n2 != 0) NULL else n1,
-        one_sample  = n2 != 0,
-        alternative = if(!oneSided) "two.sided" else switch(oneSided, "right" = "greater", "left" = "less"),
-        n1          = if(n2 == 0) NULL else n1,
-        n2          = if(n2 == 0) NULL else n2,
+        n           = if(is.null(n2) || n2 == 0) n1,
+        one_sample  = is.null(n2),
+        alternative = switch(as.character(oneSided), "right" = "greater", "left" = "less", "two.sided"),
+        n1          = if(!is.null(n2) && n2 != 0) n1,
+        n2          = if(!is.null(n2) && n2 != 0) n2,
         r           = options[["nonlocalMomentBFFR"]],
         omega       = NULL)
 
-      bf                <- exp(bfObject$log_bf)
-      attr(bf, "omega") <- bfObject$omega
-      error             <- NULL
+      bf       <- exp(bfObject$log_bf)
+      atDelta  <- bfObject$omega
+      error    <- NULL
     } else if (options[["nonlocalStandardizedEffectSize"]] == "moment") {
-      bfObject <- t_test_BFF(
+      bfObject <- BFF::t_test_BFF(
         t_stat      = tValue,
-        n           = if(n2 != 0) NULL else n1,
-        one_sample  = n2 != 0,
-        alternative = if(!oneSided) "two.sided" else switch(oneSided, "right" = "greater", "left" = "less"),
-        n1          = if(n2 == 0) NULL else n1,
-        n2          = if(n2 == 0) NULL else n2,
+        n           = if(is.null(n2) || n2 == 0) n1,
+        one_sample  = is.null(n2),
+        alternative = switch(as.character(oneSided), "right" = "greater", "left" = "less", "two.sided"),
+        n1          = if(!is.null(n2) && n2 != 0) n1,
+        n2          = if(!is.null(n2) && n2 != 0) n2,
         r           = options[["nonlocalMomentR"]],
         omega       = options[["nonlocalMomentModeDelta"]])
 
-      bf                <- exp(bfObject$log_bf)
-      error             <- NULL
+      bf     <- exp(bfObject$log_bf)
+      error  <- NULL
     }
 
   }
 
-  return(list(bf = bf, error = error, tValue = tValue, n1 = n1, n2 = n2, method = method))
+  return(list(bf = bf, error = error, tValue = tValue, n1 = n1, n2 = n2, method = method, atDelta = atDelta))
 }

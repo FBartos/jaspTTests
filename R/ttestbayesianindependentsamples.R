@@ -26,16 +26,16 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
 # Execute t-test ----
 .ttestBISTTest <- function(ttestContainer, dataset, options, derivedOptions, errors, ttestState) {
 
-	# this function is the main workhorse, and also makes a table
-	grouping   <- options[["group"]]
-	levels     <- levels(dataset[[.v(grouping)]])
-	g1 <- levels[1L]
-	g2 <- levels[2L]
+  # this function is the main workhorse, and also makes a table
+  grouping   <- options[["group"]]
+  levels     <- levels(dataset[[.v(grouping)]])
+  g1 <- levels[1L]
+  g2 <- levels[2L]
 
   # does all addcolumninfo etc.
-	ttestTable <- .ttestBISTTestMarkup(options, derivedOptions, g1, g2)
+  ttestTable <- .ttestBISTTestMarkup(options, derivedOptions, g1, g2)
 
-	# this is a standardized object. The names are identical to those in the other Bayesian t-tests
+  # this is a standardized object. The names are identical to those in the other Bayesian t-tests
   ttestResults <- .ttestBayesianEmptyObject(options, derivedOptions, ttestState)
   dependents <- options[["dependent"]]
 
@@ -43,8 +43,8 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
   ttestRows <- .ttestBayesianCreateTtestRows(dependents, options, derivedOptions, ttestState)
   ttestTable$setData(ttestRows)
   ttestContainer[["ttestTable"]] <- ttestTable
-	if (!derivedOptions[["ready"]]) # user provided no grouping variable or empty columns
-  	return(ttestResults)
+  if (!derivedOptions[["ready"]]) # user provided no grouping variable or empty columns
+    return(ttestResults)
 
   # we can do the analysis
   alreadyComputed <- !is.na(ttestRows[, "BF"]) & ttestResults[["hypothesis"]] == options[["alternative"]]
@@ -76,8 +76,9 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
 
       # these objects are made here so they don't need to be created every time a try fails,
       # which means they could be forgotten and not created
-      bf.raw <- NaN
-      error  <- NaN
+      bf.raw  <- NaN
+      error   <- NaN
+      atDelta <- NaN
 
       # BayesFactor package doesn't handle NAs, so it is necessary to exclude them
       idxNA <- is.na(dataset[[.v(var)]]) | idxNAg
@@ -96,15 +97,16 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
         if (isTryError(r)) {
 
           errorMessage <- .extractErrorMessage(r)
-	    		ttestResults[["status"]][[var]] <- "error"
-	    		ttestResults[["errorFootnotes"]][[var]] <- errorMessage
-	    		ttestTable$addFootnote(message = errorMessage, rowNames = var, colNames = "BF")
+          ttestResults[["status"]][[var]] <- "error"
+          ttestResults[["errorFootnotes"]][[var]] <- errorMessage
+          ttestTable$addFootnote(message = errorMessage, rowNames = var, colNames = "BF")
 
         } else {
 
-          bf.raw <- r[["bf"]]
-          error  <- r[["error"]]
-          ttestResults[["tValue"]][[var]] <- r[["tValue"]]
+          bf.raw  <- r[["bf"]]
+          error   <- r[["error"]]
+          atDelta <- r[["atDelta"]]
+          ttestResults[["tValue"]][[var]]  <- r[["tValue"]]
 
           if (!is.null(error) && is.na(error) && grepl("approximation", r[["method"]])) {
             error <- NaN
@@ -188,7 +190,7 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
       ttestRows[var, "error"] <- error
 
       if (options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
-        ttestRows[var, "atDelta"] <- attr(bf.raw, "omega")
+        ttestRows[var, "atDelta"] <- atDelta
     }
     # set data construction is necessary for the slower rank based analysis
     ttestTable$setData(ttestRows)
@@ -203,7 +205,7 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
 .ttestBISTTestMarkup <- function(options, derivedOptions, g1 = NULL, g2 = NULL) {
 
   jaspTable <- createJaspTable()
-	jaspTable$dependOn(c("bayesFactorType", "dependent"))
+  jaspTable$dependOn(c("bayesFactorType", "dependent"))
 
   jaspTable$title <- if (derivedOptions[["wilcoxTest"]]) {
     gettext("Bayesian Mann-Whitney U Test")
@@ -236,7 +238,7 @@ TTestBayesianIndependentSamplesInternal <- function(jaspResults, dataset, option
   jaspTable$addColumnInfo(name = "BF", type = "number", title = bfTitle)
 
   if (options[["effectSizeStandardized"]] == "nonlocal" && options[["nonlocalStandardizedEffectSize"]] == "momentBFF")
-    jaspTable$addColumnInfo(name = "atDelta", type = "number", title = gettext("At \U03B4"))
+    jaspTable$addColumnInfo(name = "atDelta", type = "number", title = gettext("At mode(\U03B4)"))
 
   if (derivedOptions[["wilcoxTest"]]) {
     jaspTable$addColumnInfo(name = "error", type = "number", title = "W")
